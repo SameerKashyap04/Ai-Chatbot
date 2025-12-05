@@ -6,6 +6,11 @@ import time
 import requests
 from src.config import load_config
 from src.orchestrator import MultiAgentOrchestrator
+from src.database import init_db, create_user, verify_user, create_admin_if_not_exists
+
+# --- Database & Auth Setup ---
+init_db()
+create_admin_if_not_exists()
 
 # --- Keep Alive Logic for Render Free Tier ---
 def keep_alive():
@@ -18,7 +23,6 @@ def keep_alive():
         except Exception as e:
             print(f"Keep-alive failed: {e}")
 
-# Start keep-alive thread only once
 if "keep_alive_started" not in st.session_state:
     t = threading.Thread(target=keep_alive, daemon=True)
     t.start()
@@ -32,18 +36,77 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Authentication UI ---
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+def login_page():
+    st.title("🔐 Login")
+    
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        
+        if submitted:
+            user = verify_user(email, password)
+            if user:
+                st.session_state.user = user
+                st.success(f"Welcome back, {user['email']}!")
+                st.rerun()
+            else:
+                st.error("Invalid email or password.")
+
+def signup_page():
+    st.title("📝 Sign Up")
+    
+    with st.form("signup_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        confirm_password = st.text_input("Confirm Password", type="password")
+        submitted = st.form_submit_button("Sign Up")
+        
+        if submitted:
+            if password != confirm_password:
+                st.error("Passwords do not match.")
+            elif len(password) < 6:
+                st.error("Password must be at least 6 characters.")
+            else:
+                if create_user(email, password):
+                    st.success("Account created! Please login.")
+                else:
+                    st.error("Email already exists.")
+
+# Auth Flow
+if not st.session_state.user:
+    tab1, tab2 = st.tabs(["Login", "Sign Up"])
+    with tab1:
+        login_page()
+    with tab2:
+        signup_page()
+    st.stop() # Stop execution here if not logged in
+
+# --- Main App (Only reachable if logged in) ---
+
 # Load Config & Initialize Orchestrator (Cached)
 @st.cache_resource
 def get_orchestrator():
     config = load_config("orchestrator_config.yaml")
-    # For demo purposes, we default to Simulated agents to ensure it works without API keys.
-    # To use real agents, change use_real_agents=True and set .env
     return MultiAgentOrchestrator(config, use_real_agents=False)
 
 orchestrator = get_orchestrator()
 
 # Sidebar
 with st.sidebar:
+    st.header(f"👤 {st.session_state.user['email']}")
+    if st.session_state.user['role'] == 'admin':
+        st.caption("Admin Mode")
+    
+    if st.button("Logout"):
+        st.session_state.user = None
+        st.rerun()
+        
+    st.divider()
     st.header("⚙️ Configuration")
     st.markdown(f"**Orchestrator:** {orchestrator.config.orchestrator.name}")
     st.markdown("**Active Agents:**")
@@ -100,11 +163,7 @@ if user_query:
         try:
             # Step 1: Broadcast
             status_container.write("📡 Broadcasting to all agents...")
-            # We need a new event loop for Streamlit's async context
-            # Or just run it directly if Streamlit supports async handling naturally (it does mostly)
-            # But calling async from sync function needs care.
             
-            # Simple async wrapper for Streamlit
             async def run_flow():
                 return await orchestrator.process_query(user_query)
             
