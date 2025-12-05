@@ -1,4 +1,7 @@
 pydantic
 pyyaml
 python-dotenv
-
+openai
+anthropic
+google-generativeai
+streamlit
