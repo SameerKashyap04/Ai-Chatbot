@@ -36,53 +36,114 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Custom CSS for Better UI ---
+st.markdown("""
+<style>
+    /* Center the login box */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0px 0px;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: transparent;
+        border-bottom: 2px solid #FF4B4B;
+    }
+    
+    /* Logout Button Styling in Sidebar */
+    .logout-btn button {
+        background-color: #ff4b4b20;
+        color: #FF4B4B;
+        border: 1px solid #FF4B4B;
+        width: 100%;
+    }
+    .logout-btn button:hover {
+        background-color: #FF4B4B;
+        color: white;
+    }
+    
+    /* Agent Status Tags */
+    .agent-tag {
+        display: inline-block;
+        padding: 4px 8px;
+        background-color: #f0f2f6;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin: 2px;
+        color: #31333F;
+    }
+    
+    /* Cleaner Sidebar headers */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        padding-top: 0px;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- Authentication UI ---
 if "user" not in st.session_state:
     st.session_state.user = None
 
 def login_page():
-    st.title("🔐 Login")
-    
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("🔐 Login")
+        st.markdown("Welcome back! Please enter your details.")
         
-        if submitted:
-            user = verify_user(email, password)
-            if user:
-                st.session_state.user = user
-                st.success(f"Welcome back, {user['email']}!")
-                st.rerun()
-            else:
-                st.error("Invalid email or password.")
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            st.markdown(" ")
+            submitted = st.form_submit_button("Login", use_container_width=True)
+            
+            if submitted:
+                user = verify_user(email, password)
+                if user:
+                    st.session_state.user = user
+                    st.success(f"Welcome back, {user['email']}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid email or password.")
 
 def signup_page():
-    st.title("📝 Sign Up")
-    
-    with st.form("signup_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-        submitted = st.form_submit_button("Sign Up")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("📝 Sign Up")
+        st.markdown("Create a new account to get started.")
         
-        if submitted:
-            if password != confirm_password:
-                st.error("Passwords do not match.")
-            elif len(password) < 6:
-                st.error("Password must be at least 6 characters.")
-            else:
-                if create_user(email, password):
-                    st.success("Account created! Please login.")
+        with st.form("signup_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            st.markdown(" ")
+            submitted = st.form_submit_button("Sign Up", use_container_width=True)
+            
+            if submitted:
+                if password != confirm_password:
+                    st.error("Passwords do not match.")
+                elif len(password) < 6:
+                    st.error("Password must be at least 6 characters.")
                 else:
-                    st.error("Email already exists.")
+                    if create_user(email, password):
+                        st.success("Account created! Please login.")
+                    else:
+                        st.error("Email already exists.")
 
 # Auth Flow
 if not st.session_state.user:
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
-    with tab1:
+    # Use columns to center the tab selection slightly or leave full width
+    login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+    with login_tab:
         login_page()
-    with tab2:
+    with signup_tab:
         signup_page()
     st.stop() # Stop execution here if not logged in
 
@@ -98,24 +159,25 @@ orchestrator = get_orchestrator()
 
 # Sidebar
 with st.sidebar:
-    st.header(f"👤 {st.session_state.user['email']}")
+    st.markdown(f"### 👤 {st.session_state.user['email']}")
     if st.session_state.user['role'] == 'admin':
-        st.caption("Admin Mode")
+        st.caption("🛡️ Admin Mode")
     
-    if st.button("Logout"):
+    st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
+    if st.button("Logout", key="logout_btn"):
         st.session_state.user = None
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
         
     st.divider()
-    st.header("⚙️ Configuration")
-    st.markdown(f"**Orchestrator:** {orchestrator.config.orchestrator.name}")
-    st.markdown("**Active Agents:**")
-    for agent in orchestrator.agents:
-        st.code(agent.name)
+    st.markdown("### ⚙️ Configuration")
     
-    st.divider()
+    with st.expander("Active Agents", expanded=False):
+        for agent in orchestrator.agents:
+            st.markdown(f'<span class="agent-tag">{agent.name}</span>', unsafe_allow_html=True)
+    
     st.markdown("### Settings")
-    use_real = st.checkbox("Use Real APIs", value=False, help="Requires .env with API keys")
+    use_real = st.toggle("Use Real APIs", value=False, help="Requires .env with API keys")
     if use_real != orchestrator.use_real_agents:
         # Update orchestrator mode if toggle changes
         orchestrator.use_real_agents = use_real
@@ -125,7 +187,7 @@ with st.sidebar:
 
 # Main Interface
 st.title("🤖 Multi-Agent Orchestrator")
-st.markdown("Ask a question and watch 8 AI agents collaborate to answer it.")
+st.markdown(f"Ask a question and watch **{len(orchestrator.agents)} AI agents** collaborate to answer it.")
 
 # Chat Input
 if "messages" not in st.session_state:
