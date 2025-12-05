@@ -1,8 +1,29 @@
 import asyncio
 import streamlit as st
 import json
+import threading
+import time
+import requests
 from src.config import load_config
 from src.orchestrator import MultiAgentOrchestrator
+
+# --- Keep Alive Logic for Render Free Tier ---
+def keep_alive():
+    url = "https://ai-chatbot-tq41.onrender.com" 
+    while True:
+        try:
+            time.sleep(600)  # Ping every 10 minutes
+            response = requests.get(url)
+            print(f"Keep-alive ping: {response.status_code}")
+        except Exception as e:
+            print(f"Keep-alive failed: {e}")
+
+# Start keep-alive thread only once
+if "keep_alive_started" not in st.session_state:
+    t = threading.Thread(target=keep_alive, daemon=True)
+    t.start()
+    st.session_state.keep_alive_started = True
+# ---------------------------------------------
 
 # Page Setup
 st.set_page_config(
@@ -41,7 +62,7 @@ with st.sidebar:
 
 # Main Interface
 st.title("🤖 Multi-Agent Orchestrator")
-st.markdown("Ask a question and watch 7 AI agents collaborate to answer it.")
+st.markdown("Ask a question and watch 8 AI agents collaborate to answer it.")
 
 # Chat Input
 if "messages" not in st.session_state:
@@ -53,7 +74,15 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
         if "details" in msg:
             with st.expander("🔍 See Agent Details"):
-                st.json(msg["details"])
+                if msg["details"].get("agents"):
+                    tabs = st.tabs([a["name"] for a in msg["details"]["agents"]])
+                    for i, agent_data in enumerate(msg["details"]["agents"]):
+                        with tabs[i]:
+                            st.markdown(f"**Answer:** {agent_data['answer']}")
+                            st.markdown(f"**Rationale:** *{agent_data['rationale']}*")
+                            st.caption(f"Confidence: {agent_data['confidence']} | Sources: {agent_data['sources']}")
+                else:
+                    st.warning("No individual agent data available.")
 
 # Handle User Input
 user_query = st.chat_input("Ask something complex...")
@@ -119,4 +148,3 @@ if user_query:
         except Exception as e:
             status_container.update(label="❌ Orchestration Failed", state="error")
             st.error(f"An error occurred: {e}")
-
